@@ -18,33 +18,59 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
+          EVENT: ${{ github.event_name }}
         run: |
           URL="https://rawnahstore.com/ar/p1654569829"
           NAME="كولومبيا جوز الهند - مقطرة"
 
-          HTML=$(curl -sL -A "Mozilla/5.0" "$URL")
-          AV=$(echo "$HTML" | grep -oP 'product:availability" content="\K[^"]+' | head -1)
-          PR=$(echo "$HTML" | grep -oP 'product:price:amount" content="\K[^"]+' | head -1)
+          send() {
+            curl -sf "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TG_CHAT}" \
+              --data-urlencode "text=$1" > /dev/null || { echo "::error::فشل الإرسال لتيليجرام — راجع TG_TOKEN و TG_CHAT"; exit 1; }
+          }
 
-          if [ -z "$AV" ]; then echo "تعذر قراءة الصفحة"; exit 0; fi
+          [ -z "$TG_TOKEN" ] && { echo "::error::السر TG_TOKEN غير موجود"; exit 1; }
+          [ -z "$TG_CHAT" ] && { echo "::error::السر TG_CHAT غير موجود"; exit 1; }
+
+          CODE=$(curl -sL -o page.html -w "%{http_code}" \
+            -A "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36" \
+            -H "Accept-Language: ar,en" "$URL")
+          echo "HTTP: $CODE"
+
+          read AV PR <<< $(python3 - <<'PY'
+          import re
+          h = open("page.html", encoding="utf-8", errors="ignore").read()
+          def meta(k):
+              for t in re.findall(r"<meta[^>]+>", h):
+                  if re.search(r'(property|name)=["\']' + re.escape(k) + r'["\']', t):
+                      m = re.search(r'content=["\']([^"\']*)', t)
+                      if m: return m.group(1).strip()
+              return ""
+          av = meta("product:availability").replace(" ", "_") or "unknown"
+          pr = meta("product:price:amount") or "?"
+          print(av, pr)
+          PY
+          )
+          AV=${AV//_/ }
+          echo "الحالة: $AV — السعر: $PR"
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            send "🔔 تجربة: المتتبع شغّال
+          الصفحة: HTTP $CODE
+          الحالة: $AV | السعر: $PR ريال"
+          fi
+
+          if [ "$AV" = "unknown" ]; then echo "::warning::تعذر قراءة حالة المنتج"; exit 0; fi
 
           NOW="$AV|$PR"
           LAST=$(cat state.txt 2>/dev/null || echo "out of stock|55")
-          echo "الحالي: $NOW  —  السابق: $LAST"
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            curl -sf "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=${TG_CHAT}" \
-              --data-urlencode "text=🔔 تجربة: المتتبع شغّال — الحالة الآن: ${AV} | ${PR} ريال" > /dev/null
-          fi
 
           if [ "$NOW" != "$LAST" ]; then
             if [ "$AV" = "out of stock" ]; then STATUS="❌ نفدت الكمية"; else STATUS="✅ متوفر الآن"; fi
-            MSG=$(printf "☕ %s\n%s\nالسعر: %s ريال\n%s" "$NAME" "$STATUS" "$PR" "$URL")
-            curl -sf "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=${TG_CHAT}" \
-              --data-urlencode "text=${MSG}" > /dev/null
-
+            send "☕ $NAME
+          $STATUS
+          السعر: $PR ريال
+          $URL"
             echo "$NOW" > state.txt
             git config user.name "tracker-bot"
             git config user.email "tracker-bot@users.noreply.github.com"
