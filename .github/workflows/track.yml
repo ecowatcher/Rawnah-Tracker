@@ -2,7 +2,7 @@ name: تتبع منتج رونه
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/37 * * * *"
   workflow_dispatch:
 
 permissions:
