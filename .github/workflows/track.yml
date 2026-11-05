@@ -1,0 +1,54 @@
+name: تتبع منتج رونه
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: فحص المنتج
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+        run: |
+          URL="https://rawnahstore.com/ar/p1654569829"
+          NAME="كولومبيا جوز الهند - مقطرة"
+
+          HTML=$(curl -sL -A "Mozilla/5.0" "$URL")
+          AV=$(echo "$HTML" | grep -oP 'product:availability" content="\K[^"]+' | head -1)
+          PR=$(echo "$HTML" | grep -oP 'product:price:amount" content="\K[^"]+' | head -1)
+
+          if [ -z "$AV" ]; then echo "تعذر قراءة الصفحة"; exit 0; fi
+
+          NOW="$AV|$PR"
+          LAST=$(cat state.txt 2>/dev/null || echo "out of stock|55")
+          echo "الحالي: $NOW  —  السابق: $LAST"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TG_CHAT}" \
+              --data-urlencode "text=🔔 تجربة: المتتبع شغّال — الحالة الآن: ${AV} | ${PR} ريال" > /dev/null
+          fi
+
+          if [ "$NOW" != "$LAST" ]; then
+            if [ "$AV" = "out of stock" ]; then STATUS="❌ نفدت الكمية"; else STATUS="✅ متوفر الآن"; fi
+            MSG=$(printf "☕ %s\n%s\nالسعر: %s ريال\n%s" "$NAME" "$STATUS" "$PR" "$URL")
+            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TG_CHAT}" \
+              --data-urlencode "text=${MSG}" > /dev/null
+
+            echo "$NOW" > state.txt
+            git config user.name "tracker-bot"
+            git config user.email "tracker-bot@users.noreply.github.com"
+            git add state.txt
+            git commit -m "تحديث حالة المنتج: $NOW"
+            git push
+          fi
