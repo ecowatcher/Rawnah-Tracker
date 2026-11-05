@@ -12,7 +12,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: فحص المنتج
         env:
@@ -33,7 +33,7 @@ jobs:
           echo "الحالي: $NOW  —  السابق: $LAST"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            curl -sf "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TG_CHAT}" \
               --data-urlencode "text=🔔 تجربة: المتتبع شغّال — الحالة الآن: ${AV} | ${PR} ريال" > /dev/null
           fi
@@ -41,7 +41,7 @@ jobs:
           if [ "$NOW" != "$LAST" ]; then
             if [ "$AV" = "out of stock" ]; then STATUS="❌ نفدت الكمية"; else STATUS="✅ متوفر الآن"; fi
             MSG=$(printf "☕ %s\n%s\nالسعر: %s ريال\n%s" "$NAME" "$STATUS" "$PR" "$URL")
-            curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            curl -sf "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TG_CHAT}" \
               --data-urlencode "text=${MSG}" > /dev/null
 
