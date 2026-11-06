@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      test:
+        description: "إرسال رسالة تجربة"
+        type: boolean
+        default: true
+
+concurrency:
+  group: tracker
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,6 +28,7 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
           EVENT: ${{ github.event_name }}
+          TEST: ${{ inputs.test }}
         run: |
           URL="https://rawnahstore.com/ar/%D9%83%D9%88%D9%84%D9%88%D9%85%D8%A8%D9%8A%D8%A7-%D8%AC%D9%88%D8%B2-%D8%A7%D9%84%D9%87%D9%86%D8%AF---%D9%85%D9%82%D8%B7%D8%B1%D8%A9/p1654569829"
           NAME="كولومبيا جوز الهند - مقطرة"
@@ -54,7 +64,7 @@ jobs:
           AV=${AV//_/ }
           echo "الحالة: $AV — السعر: $PR"
 
-          if [ "$EVENT" = "workflow_dispatch" ]; then
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$TEST" = "true" ]; then
             send "🔔 تجربة: المتتبع شغّال
           الصفحة: HTTP $CODE
           الحالة: $AV | السعر: $PR ريال"
